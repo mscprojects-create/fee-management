@@ -5,7 +5,7 @@ const txnSchema = new mongoose.Schema({
   fee_id:          { type: mongoose.Schema.Types.ObjectId, ref: 'FeeStructure', required: true },
   amount_paid:     { type: Number, required: true },
   payment_date:    { type: Date, default: Date.now },
-  payment_method:  { type: String, enum: ['online','cash','dd','neft'], default: 'online' },
+  payment_method:  { type: String, enum: ['online','upi','card','cash','dd','neft','cheque'], default: 'online' },
   transaction_ref: { type: String, unique: true },
   receipt_no:      { type: String, unique: true },
   status:          { type: String, enum: ['paid','pending','failed'], default: 'paid' },
