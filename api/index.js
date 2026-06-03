@@ -144,12 +144,12 @@ app.get('/api/student/payments', async (req, res) => {
     const payments = await PaymentTransaction.find({ student_id: payload.id })
       .sort({ payment_date: -1 })
       .populate('fee_id', 'fee_category amount course semester academic_year')
-    res.json({ payments })
+    res.json(payments.map(p => ({ ...p.toObject(), amount: p.amount_paid })))
   } catch (err) { handleErr(err, res) }
 })
 
 // IMPORTANT: specific route before param route
-app.post('/api/student/payments/pay', async (req, res) => {
+app.post('/api/student/payments', async (req, res) => {
   try {
     const decoded = requireRole(req, 'student')
     const { fee_id, payment_method } = req.body
@@ -198,6 +198,21 @@ app.put('/api/student/profile', async (req, res) => {
   } catch (err) { handleErr(err, res) }
 })
 
+app.get('/api/student/receipt', async (req, res) => {
+  try {
+    const decoded = requireRole(req, 'student', 'administrator', 'staff')
+    const payment = await PaymentTransaction.findOne({ receipt_no: req.query.receipt_no })
+      .populate('student_id', 'name roll_no email course semester phone address')
+      .populate('fee_id', 'fee_category amount course semester academic_year due_date')
+      .populate('processed_by', 'name')
+    if (!payment) return res.status(404).json({ error: 'Receipt not found' })
+    if (decoded.role === 'student' && payment.student_id._id.toString() !== decoded.id) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+    res.json({ ...payment.toObject(), amount: payment.amount_paid })
+  } catch (err) { handleErr(err, res) }
+})
+
 app.get('/api/student/receipt/:receiptNo', async (req, res) => {
   try {
     const decoded = requireRole(req, 'student', 'administrator', 'staff')
@@ -229,7 +244,7 @@ app.get('/api/admin/dashboard', async (req, res) => {
     res.json({
       totalStudents,
       totalRevenue: totalRevenue[0]?.total || 0,
-      recentTxns,
+      recentTxns: recentTxns.map(t => ({ ...t.toObject(), amount: t.amount_paid })),
       pendingReminders,
     })
   } catch (err) { handleErr(err, res) }
@@ -239,7 +254,7 @@ app.get('/api/admin/fees', async (req, res) => {
   try {
     requireRole(req, 'administrator', 'staff')
     const fees = await FeeStructure.find().sort({ course: 1, semester: 1 })
-    res.json({ fees })
+    res.json(fees)
   } catch (err) { handleErr(err, res) }
 })
 
@@ -262,12 +277,12 @@ app.post('/api/admin/fees', async (req, res) => {
   } catch (err) { handleErr(err, res) }
 })
 
-app.put('/api/admin/fees/:id', async (req, res) => {
+app.put('/api/admin/fees', async (req, res) => {
   try {
     requireRole(req, 'administrator')
     const { course, semester, fee_category, amount, due_date, academic_year } = req.body
     const fee = await FeeStructure.findByIdAndUpdate(
-      req.params.id,
+      req.body.id,
       { course, semester: parseInt(semester), fee_category, amount: parseFloat(amount), due_date: new Date(due_date), academic_year },
       { new: true }
     )
@@ -276,10 +291,10 @@ app.put('/api/admin/fees/:id', async (req, res) => {
   } catch (err) { handleErr(err, res) }
 })
 
-app.delete('/api/admin/fees/:id', async (req, res) => {
+app.delete('/api/admin/fees', async (req, res) => {
   try {
     requireRole(req, 'administrator')
-    const fee = await FeeStructure.findByIdAndDelete(req.params.id)
+    const fee = await FeeStructure.findByIdAndDelete(req.query.id)
     if (!fee) return res.status(404).json({ error: 'Fee structure not found' })
     res.json({ message: 'Deleted' })
   } catch (err) { handleErr(err, res) }
@@ -303,7 +318,7 @@ app.get('/api/admin/students', async (req, res) => {
       Student.find(query).select('-password').skip(skip).limit(limit).sort({ createdAt: -1 }),
       Student.countDocuments(query)
     ])
-    res.json({ students, total, page, pages: Math.ceil(total / limit) })
+    res.json(students)
   } catch (err) { handleErr(err, res) }
 })
 
@@ -325,23 +340,23 @@ app.post('/api/admin/students', async (req, res) => {
   } catch (err) { handleErr(err, res) }
 })
 
-app.put('/api/admin/students/:id', async (req, res) => {
+app.put('/api/admin/students', async (req, res) => {
   try {
     requireRole(req, 'administrator', 'staff')
     const { name, course, semester, phone, address, status, password } = req.body
     const update = { name, course, semester: parseInt(semester), phone, address, status }
     if (password) update.password = await bcrypt.hash(password, 10)
-    const student = await Student.findByIdAndUpdate(req.params.id, update, { new: true }).select('-password')
+    const student = await Student.findByIdAndUpdate(req.body.id, update, { new: true }).select('-password')
     if (!student) return res.status(404).json({ error: 'Student not found' })
     res.json({ student })
   } catch (err) { handleErr(err, res) }
 })
 
-app.delete('/api/admin/students/:id', async (req, res) => {
+app.delete('/api/admin/students', async (req, res) => {
   try {
     requireRole(req, 'administrator', 'staff')
     const student = await Student.findByIdAndUpdate(
-      req.params.id, { status: 'inactive' }, { new: true }
+      req.query.id, { status: 'inactive' }, { new: true }
     ).select('-password')
     if (!student) return res.status(404).json({ error: 'Student not found' })
     res.json({ message: 'Student deactivated', student })
@@ -399,7 +414,7 @@ app.get('/api/admin/reports', async (req, res) => {
       .populate('fee_id', 'fee_category amount')
       .sort({ payment_date: -1 })
     const total = txns.reduce((s, t) => s + t.amount_paid, 0)
-    res.json({ txns, total, count: txns.length })
+    res.json({ txns: txns.map(t => ({ ...t.toObject(), amount: t.amount_paid })), total, count: txns.length })
   } catch (err) { handleErr(err, res) }
 })
 
@@ -418,7 +433,7 @@ app.get('/api/staff/dashboard', async (req, res) => {
         .populate('fee_id', 'fee_category'),
       PaymentTransaction.countDocuments(),
     ])
-    res.json({ todayTotal: todayTotal[0]?.total || 0, recentTxns, totalCount })
+    res.json({ todayCollection: todayTotal[0]?.total || 0, recentTxns: recentTxns.map(t => ({ ...t.toObject(), amount: t.amount_paid })), totalCount })
   } catch (err) { handleErr(err, res) }
 })
 
@@ -436,14 +451,15 @@ app.get('/api/staff/payments', async (req, res) => {
         .populate('processed_by', 'name'),
       PaymentTransaction.countDocuments()
     ])
-    res.json({ payments, total, page, pages: Math.ceil(total / limit) })
+    res.json(payments.map(p => ({ ...p.toObject(), amount: p.amount_paid })))
   } catch (err) { handleErr(err, res) }
 })
 
 app.post('/api/staff/payments', async (req, res) => {
   try {
     const user = requireRole(req, 'staff', 'administrator')
-    const { student_id, fee_id, amount_paid, payment_method, transaction_ref } = req.body
+    const { student_id, fee_id, payment_method, transaction_ref } = req.body
+    const amount_paid = req.body.amount_paid ?? req.body.amount
     if (!student_id || !fee_id || !amount_paid || !payment_method) {
       return res.status(400).json({ error: 'All required fields must be provided' })
     }
