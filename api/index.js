@@ -331,9 +331,8 @@ app.post('/api/admin/students', async (req, res) => {
     }
     const existing = await Student.findOne({ $or: [{ email }, { roll_no }] })
     if (existing) return res.status(409).json({ error: 'Student with this email or roll number already exists' })
-    const hashed = await bcrypt.hash(password, 10)
     const student = await Student.create({
-      name, roll_no, email: email.toLowerCase(), password: hashed,
+      name, roll_no, email: email.toLowerCase(), password,
       course, semester: parseInt(semester), phone, address
     })
     res.status(201).json({ student: { ...student.toObject(), password: undefined } })
@@ -501,9 +500,9 @@ app.post('/api/seed', async (req, res) => {
       FeeReminder.deleteMany({})
     ])
     // Admin users
-    const admin = await AdminUser.create({ name: 'Admin', email: 'admin@fees.com', password: await bcrypt.hash('admin123', 10), role: 'administrator' })
-    await AdminUser.create({ name: 'Priya Sharma', email: 'priya@fees.com', password: await bcrypt.hash('staff123', 10), role: 'staff' })
-    await AdminUser.create({ name: 'Ramesh Gupta', email: 'ramesh@fees.com', password: await bcrypt.hash('staff123', 10), role: 'staff' })
+    const admin = await AdminUser.create({ name: 'Admin', email: 'admin@fees.com', password: 'admin123', role: 'administrator' })
+    await AdminUser.create({ name: 'Priya Sharma', email: 'priya@fees.com', password: 'staff123', role: 'staff' })
+    await AdminUser.create({ name: 'Ramesh Gupta', email: 'ramesh@fees.com', password: 'staff123', role: 'staff' })
     // Students
     const students = await Student.insertMany([
       { name: 'Rahul Verma', roll_no: '1241019001', email: 'rahul@student.com', password: await bcrypt.hash('student123', 10), course: 'M.Sc. Computer Science', semester: 4 },
